@@ -62,10 +62,19 @@ void OptimizeMirroring::run()
     sorted_boxes.push_back(&net_box.second);
   }
 
-  // Sort net boxes by net hpwl.
+  // Sort net boxes by net hpwl.  The boxes come out of an unordered map keyed
+  // by net pointer, so nets of equal hpwl would otherwise be ordered by where
+  // the heap put them, and which of two tied instances is mirrored first would
+  // change from run to run.  The net id makes the order total.
   std::ranges::sort(sorted_boxes,
                     [](NetBox* net_box1, NetBox* net_box2) -> bool {
-                      return net_box1->hpwl() > net_box2->hpwl();
+                      const int64_t hpwl1 = net_box1->hpwl();
+                      const int64_t hpwl2 = net_box2->hpwl();
+                      if (hpwl1 != hpwl2) {
+                        return hpwl1 > hpwl2;
+                      }
+                      return net_box1->getNet()->getId()
+                             < net_box2->getNet()->getId();
                     });
 
   std::vector<odb::dbInst*> mirror_candidates
