@@ -489,7 +489,10 @@ void RepairDesign::repairClkNets(double max_wire_length)
                              db_network_->flatNet(network_->term(clk_pin)))
                          : db_network_->dbToSta(db_network_->flatNet(clk_pin));
           // clang-format on
-          if (net && network_->isDriver(clk_pin)) {
+          // A dont-touch clock net is left alone, as dont-touch data nets
+          // are in repairNet(drvr, ...).
+          if (net && network_->isDriver(clk_pin)
+              && !resizer_->dontTouch(net)) {
             sta::Vertex* drvr = graph_->pinDrvrVertex(clk_pin);
             // Do not resize clock tree gates.
             repairNet(net,
