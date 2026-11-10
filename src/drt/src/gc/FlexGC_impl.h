@@ -199,7 +199,11 @@ class FlexGCWorker::Impl
       const std::vector<std::set<std::pair<odb::Point, odb::Point>>>&
           fixedPolygonEdges);
   void initNet_pins_polygonCorners(gcNet* net);
-  void initNet_pins_polygonCorners_helper(gcNet* net, gcPin* pin);
+  void initNet_pins_polygonCorners_helper(
+      gcNet* net,
+      gcPin* pin,
+      std::map<frLayerNum, std::vector<std::pair<frCoord, frCoord>>>&
+          fixed_corner_pts);
   void initNet_pins_maxRectangles(gcNet* net);
   void initNet_pins_maxRectangles_getFixedMaxRectangles(
       gcNet* net,
