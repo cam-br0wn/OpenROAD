@@ -1563,6 +1563,48 @@ std::optional<float> Resizer::cellLeakage(sta::LibertyCell* cell)
   return leakage;
 }
 
+// Liberty analysis point index at which the sizing leakage limit is judged
+// for a cell: the one where the cell leaks most.  A leakage ratio is only
+// meaningful where leakage is significant.  A library characterized at a
+// cold corner can report its smallest cells at a numerical floor, so that
+// every larger size exceeds any ratio there.  Judging the limit at the
+// linked library made the result depend on which library was read first.
+// Returns -1 if the cell has no leakage at any analysis point.
+int Resizer::leakageLimitLibertyIndex(sta::LibertyCell* cell)
+{
+  int max_index = -1;
+  float max_leakage = 0.0;
+  for (sta::Corner* corner : *sta_->corners()) {
+    for (const sta::MinMax* min_max : sta::MinMax::range()) {
+      const int lib_ap_index = corner->libertyIndex(min_max);
+      sta::LibertyCell* corner_cell = cell->cornerCell(lib_ap_index);
+      if (corner_cell == nullptr) {
+        continue;
+      }
+      std::optional<float> leakage = cellLeakage(corner_cell);
+      if (leakage && (max_index == -1 || *leakage > max_leakage)) {
+        max_index = lib_ap_index;
+        max_leakage = *leakage;
+      }
+    }
+  }
+  return max_index;
+}
+
+// Leakage of a cell at a liberty analysis point index from
+// leakageLimitLibertyIndex.  Falls back to the linked cell.
+std::optional<float> Resizer::cellLeakage(sta::LibertyCell* cell,
+                                          int lib_ap_index)
+{
+  if (lib_ap_index >= 0) {
+    sta::LibertyCell* corner_cell = cell->cornerCell(lib_ap_index);
+    if (corner_cell) {
+      return cellLeakage(corner_cell);
+    }
+  }
+  return cellLeakage(cell);
+}
+
 // For debugging
 void Resizer::reportEquivalentCells(sta::LibertyCell* base_cell,
                                     bool match_cell_footprint,
@@ -1607,10 +1649,14 @@ void Resizer::reportEquivalentCells(sta::LibertyCell* base_cell,
     }
   }
 
+  // Report leakage where the sizing leakage limit is judged
+  const int leakage_ap = leakageLimitLibertyIndex(base_cell);
+
   // Sort equiv cells by ascending area and leakage
   // STA sorts them by drive resistance
   std::ranges::stable_sort(
-      equiv_cells, [this](sta::LibertyCell* a, sta::LibertyCell* b) {
+      equiv_cells,
+      [this, leakage_ap](sta::LibertyCell* a, sta::LibertyCell* b) {
         dbMaster* master_a = this->getDbNetwork()->staToDb(a);
         dbMaster* master_b = this->getDbNetwork()->staToDb(b);
         if (master_a && master_b) {
@@ -1618,8 +1664,8 @@ void Resizer::reportEquivalentCells(sta::LibertyCell* base_cell,
             return master_a->getArea() < master_b->getArea();
           }
         }
-        std::optional<float> leakage_a = this->cellLeakage(a);
-        std::optional<float> leakage_b = this->cellLeakage(b);
+        std::optional<float> leakage_a = this->cellLeakage(a, leakage_ap);
+        std::optional<float> leakage_b = this->cellLeakage(b, leakage_ap);
         // Compare leakages only if they are defined
         if (leakage_a && leakage_b) {
           return *leakage_a < *leakage_b;
@@ -1639,7 +1685,7 @@ void Resizer::reportEquivalentCells(sta::LibertyCell* base_cell,
   if (master) {
     base_area = block_->dbuAreaToMicrons(master->getArea());
   }
-  std::optional<float> base_leakage = cellLeakage(base_cell);
+  std::optional<float> base_leakage = cellLeakage(base_cell, leakage_ap);
   if (base_leakage) {
     logger_->report(
         "======================================================================"
@@ -1663,7 +1709,8 @@ void Resizer::reportEquivalentCells(sta::LibertyCell* base_cell,
         continue;
       }
       double equiv_area = block_->dbuAreaToMicrons(equiv_master->getArea());
-      std::optional<float> equiv_cell_leakage = cellLeakage(equiv_cell);
+      std::optional<float> equiv_cell_leakage
+          = cellLeakage(equiv_cell, leakage_ap);
       if (equiv_cell_leakage) {
         logger_->report("{:<41} {:>7.3f} {:>5.2f} {:>8.2e} {:>5.2f}   {}",
                         cell_name,
@@ -1944,8 +1991,10 @@ sta::LibertyCellSeq Resizer::getSwappableCells(sta::LibertyCell* source_cell)
   if (equiv_cells) {
     int64_t source_cell_area = master->getArea();
     std::optional<float> source_cell_leakage;
+    int leakage_ap = -1;
     if (sizing_leakage_limit_) {
-      source_cell_leakage = cellLeakage(source_cell);
+      leakage_ap = leakageLimitLibertyIndex(source_cell);
+      source_cell_leakage = cellLeakage(source_cell, leakage_ap);
     }
     for (sta::LibertyCell* equiv_cell : *equiv_cells) {
       if (dontUse(equiv_cell) || !isLinkCell(equiv_cell)) {
@@ -1965,7 +2014,8 @@ sta::LibertyCellSeq Resizer::getSwappableCells(sta::LibertyCell* source_cell)
       }
 
       if (sizing_leakage_limit_ && source_cell_leakage) {
-        std::optional<float> equiv_cell_leakage = cellLeakage(equiv_cell);
+        std::optional<float> equiv_cell_leakage
+            = cellLeakage(equiv_cell, leakage_ap);
         if (equiv_cell_leakage
             && (*equiv_cell_leakage / *source_cell_leakage
                 > sizing_leakage_limit_.value())) {

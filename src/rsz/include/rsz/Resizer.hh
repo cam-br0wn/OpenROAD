@@ -498,6 +498,8 @@ class Resizer : public sta::dbStaState, public sta::dbNetworkObserver
   utl::Logger* logger() const { return logger_; }
   void eliminateDeadLogic(bool clean_nets);
   std::optional<float> cellLeakage(sta::LibertyCell* cell);
+  int leakageLimitLibertyIndex(sta::LibertyCell* cell);
+  std::optional<float> cellLeakage(sta::LibertyCell* cell, int lib_ap_index);
   // For debugging - calls getSwappableCells
   void reportEquivalentCells(sta::LibertyCell* base_cell,
                              bool match_cell_footprint,
