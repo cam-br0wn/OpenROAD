@@ -473,7 +473,34 @@ void EstimateParasitics::updateParasitics(bool save_guides)
   // invalidate those delays. Do it in bulk instead of interleaving with each
   // groute call.
   if (parasitics_src_ != ParasiticsSrc::none) {
+    // True when estimateWireParasitic(net) makes no parasitic because the
+    // net's driver is an ideal clock (same predicate, same choice of driver).
+    auto ideal_clock_net = [this](const sta::Net* net) {
+      PinSet* drivers = network_->drivers(net);
+      if (drivers && !drivers->empty()) {
+        PinSet::Iterator drvr_iter(drivers);
+        return sta_->isIdealClock(drvr_iter.next());
+      }
+      return false;
+    };
     for (const sta::Net* net : parasitics_invalid_) {
+      // A net driven by an ideal clock gets no estimated parasitics, so the
+      // placement branch above made no new annotation for the timer to pick
+      // up.  Invalidating its driver anyway re-seeds the clock root and
+      // re-visits every register on the clock at the next findDelays:
+      // O(registers) per resized register.  OpenSTA's own
+      // replaceCellPinInvalidate leaves the driver of an ideal clock pin
+      // alone for the same reason.
+      if (parasitics_src_ == ParasiticsSrc::placement
+          && ideal_clock_net(net)) {
+        debugPrint(logger_,
+                   EST,
+                   "estimate_parasitics",
+                   1,
+                   "net {} is an ideal clock net: delays left valid",
+                   sdc_network_->pathName(net));
+        continue;
+      }
       debugPrint(logger_,
                  EST,
                  "estimate_parasitics",
