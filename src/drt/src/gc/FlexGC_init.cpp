@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2019-2025, The OpenROAD Authors
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 #include <map>
@@ -722,32 +723,36 @@ void FlexGCWorker::Impl::initNet_pins_polygonEdges(gcNet* net)
   }
 }
 namespace {
-bool isPolygonCorner(const frCoord x,
-                     const frCoord y,
-                     const gtl::polygon_90_set_data<frCoord>& poly_set)
+// Vertices (outer rings and holes) of the polygons of a fixed polygon set,
+// sorted for binary search. Forming the polygons is the expensive part
+// (a scanline over the whole set), so it is done once per net and layer
+// instead of once per corner.
+std::vector<std::pair<frCoord, frCoord>> polygonCornerPoints(
+    const gtl::polygon_90_set_data<frCoord>& poly_set)
 {
   std::vector<gtl::polygon_90_with_holes_data<frCoord>> polygons;
   poly_set.get(polygons);
+  std::vector<std::pair<frCoord, frCoord>> pts;
   for (const auto& polygon : polygons) {
     for (const auto& pt : polygon) {
-      if (pt.x() == x && pt.y() == y) {
-        return true;
-      }
+      pts.emplace_back(pt.x(), pt.y());
     }
     for (auto hole_itr = polygon.begin_holes(); hole_itr != polygon.end_holes();
          ++hole_itr) {
       for (const auto& pt : (*hole_itr)) {
-        if (pt.x() == x && pt.y() == y) {
-          return true;
-        }
+        pts.emplace_back(pt.x(), pt.y());
       }
     }
   }
-  return false;
+  std::sort(pts.begin(), pts.end());
+  return pts;
 }
 }  // namespace
-void FlexGCWorker::Impl::initNet_pins_polygonCorners_helper(gcNet* net,
-                                                            gcPin* pin)
+void FlexGCWorker::Impl::initNet_pins_polygonCorners_helper(
+    gcNet* net,
+    gcPin* pin,
+    std::map<frLayerNum, std::vector<std::pair<frCoord, frCoord>>>&
+        fixed_corner_pts)
 {
   for (auto& edges : pin->getPolygonEdges()) {
     std::vector<std::unique_ptr<gcCorner>> tmpCorners;
@@ -821,9 +826,18 @@ void FlexGCWorker::Impl::initNet_pins_polygonCorners_helper(gcNet* net,
         }
 
       } else {
-        currCorner->setFixed(isPolygonCorner(currCorner->x(),
-                                             currCorner->y(),
-                                             net->getPolygons(true)[layerNum]));
+        auto pts_itr = fixed_corner_pts.find(layerNum);
+        if (pts_itr == fixed_corner_pts.end()) {
+          pts_itr = fixed_corner_pts
+                        .emplace(layerNum,
+                                 polygonCornerPoints(
+                                     net->getPolygons(true)[layerNum]))
+                        .first;
+        }
+        currCorner->setFixed(std::binary_search(
+            pts_itr->second.begin(),
+            pts_itr->second.end(),
+            std::pair<frCoord, frCoord>(currCorner->x(), currCorner->y())));
       }
       // currCorner->setFixed(prevEdge->isFixed() && nextEdge->isFixed());
 
@@ -846,9 +860,12 @@ void FlexGCWorker::Impl::initNet_pins_polygonCorners_helper(gcNet* net,
 void FlexGCWorker::Impl::initNet_pins_polygonCorners(gcNet* net)
 {
   int numLayers = getTech()->getLayers().size();
+  // fixed-polygon vertices of this net, per layer, filled on first use
+  std::map<frLayerNum, std::vector<std::pair<frCoord, frCoord>>>
+      fixed_corner_pts;
   for (int i = 0; i < numLayers; i++) {
     for (auto& pin : net->getPins(i)) {
-      initNet_pins_polygonCorners_helper(net, pin.get());
+      initNet_pins_polygonCorners_helper(net, pin.get(), fixed_corner_pts);
     }
   }
 }
