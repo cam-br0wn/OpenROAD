@@ -1,0 +1,48 @@
+VERSION 5.8 ;
+DIVIDERCHAR "/" ;
+BUSBITCHARS "[]" ;
+DESIGN gated_same_center ;
+UNITS DISTANCE MICRONS 2000 ;
+
+DIEAREA ( 0 0 ) ( 200000 200000 ) ;
+
+COMPONENTS 12 ;
+- ffa0 DFF_X1 + PLACED ( 19000 28000 ) N ;
+- ffb0 DFF_X1 + PLACED ( 38000 28000 ) N ;
+- ffb1 DFF_X1 + PLACED ( 57000 28000 ) N ;
+- ffa1 DFF_X1 + PLACED ( 76000 28000 ) N ;
+- ffc0 DFF_X1 + PLACED ( 19000 140000 ) N ;
+- ffc1 DFF_X1 + PLACED ( 38000 140000 ) N ;
+- ffd0 DFF_X1 + PLACED ( 114000 140000 ) N ;
+- ffd1 DFF_X1 + PLACED ( 133000 140000 ) N ;
+- ga CLKGATE_X1 + PLACED ( 19000 56000 ) N ;
+- gb CLKGATE_X1 + PLACED ( 57000 56000 ) N ;
+- gc CLKGATE_X1 + PLACED ( 19000 112000 ) N ;
+- gd CLKGATE_X1 + PLACED ( 114000 112000 ) N ;
+END COMPONENTS
+
+PINS 1 ;
+- clk + NET clk + DIRECTION INPUT + USE SIGNAL
+  + LAYER metal6 ( -140 0 ) ( 140 280 )
+  + FIXED ( 100000 200000 ) S ;
+END PINS
+
+NETS 5 ;
+- clk
+  ( PIN clk ) ( ga CK ) ( gb CK ) ( gc CK ) ( gd CK )
+ ;
+- gclka
+  ( ga GCK ) ( ffa0 CK ) ( ffa1 CK )
+ ;
+- gclkb
+  ( gb GCK ) ( ffb0 CK ) ( ffb1 CK )
+ ;
+- gclkc
+  ( gc GCK ) ( ffc0 CK ) ( ffc1 CK )
+ ;
+- gclkd
+  ( gd GCK ) ( ffd0 CK ) ( ffd1 CK )
+ ;
+END NETS
+
+END DESIGN
