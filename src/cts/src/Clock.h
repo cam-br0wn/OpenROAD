@@ -59,6 +59,7 @@ class ClockInst
   int getX() const { return location_.getX(); }
   int getY() const { return location_.getY(); }
   Point<int> getLocation() const { return location_; }
+  void setLocation(int x, int y) { location_ = Point<int>(x, y); }
 
   void setInstObj(odb::dbInst* inst) { instObj_ = inst; }
   odb::dbInst* getDbInst() const { return instObj_; }

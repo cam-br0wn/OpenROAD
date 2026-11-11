@@ -1636,6 +1636,7 @@ void TritonCTS::writeClockNetsToDb(TreeBuilder* builder,
   numFixedNets_ = 0;
   ClockSubNet* rootSubNet = nullptr;
   std::set<ClockInst*> removedSinks;
+  std::set<const ClockInst*> sinksInSubNets;
   clockNet.forEachSubNet([&](ClockSubNet& subNet) {
     bool outputPinFound = true;
     bool inputPinFound = true;
@@ -1666,6 +1667,7 @@ void TritonCTS::writeClockNetsToDb(TreeBuilder* builder,
     }
 
     subNet.forEachSink([&](ClockInst* inst) {
+      sinksInSubNets.insert(inst);
       odb::dbITerm* inputPin = nullptr;
       if (inst->isClockBuffer()) {
         odb::dbInst* sink = inst->getDbInst();
@@ -1710,6 +1712,19 @@ void TritonCTS::writeClockNetsToDb(TreeBuilder* builder,
       odb::dbInst::destroy(driver);
       removedSinks.insert(subNet.getDriver());
       checkUpstreamConnections(inputNet);
+    }
+  });
+
+  // All sinks were taken off the clock net above. One that is in no sub net
+  // of the tree has not been put back on any net.
+  clockNet.forEachSink([&](const ClockInst& sink) {
+    if (!sinksInSubNets.contains(&sink)) {
+      logger_->error(CTS,
+                     137,
+                     "Sink {} of clock net {} is in no net of the clock tree "
+                     "and would be left unconnected.",
+                     sink.getName(),
+                     clockNet.getName());
     }
   });
 

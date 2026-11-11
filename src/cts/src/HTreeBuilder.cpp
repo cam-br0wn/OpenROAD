@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -341,6 +342,8 @@ void HTreeBuilder::initSinkRegion()
           static_cast<int>(options_->getVertexBufferDistance() / dbUnits));
     }
   }
+
+  separateCoincidentSinks();
 
   std::vector<std::pair<float, float>> topLevelSinks;
   std::vector<const ClockInst*> sinkInsts;
@@ -1824,6 +1827,46 @@ void HTreeBuilder::computeBranchingPoints(const unsigned level,
         refineBranchingPointsWithClustering(
             topology, level, branchPtIdx1, branchPtIdx2, clockRoot, sinks);
       });
+}
+
+// The tree looks a sink up by its normalized location (mapLocationToSink_).
+// Two sinks at one location are one key there: the second replaces the first,
+// which then belongs to no sub net and is left off the clock when the nets
+// are written. Clock gates moved to the center of their fanout can be stacked
+// that way. Give each such sink a location of its own, one dbu at a time.
+void HTreeBuilder::separateCoincidentSinks()
+{
+  std::set<Point<double>> usedLocations;
+  unsigned numMoved = 0;
+  clock_.forEachSink([&](ClockInst& sink) {
+    const int y = sink.getY();
+    int x = sink.getX();
+    // Same expression as the keys of mapLocationToSink_
+    while (!usedLocations
+                .insert(Point<double>((float) x / wireSegmentUnit_,
+                                      (float) y / wireSegmentUnit_))
+                .second) {
+      ++x;
+    }
+    if (x != sink.getX()) {
+      debugPrint(logger_,
+                 CTS,
+                 "clustering",
+                 1,
+                 "sink {} shares its location with another sink: x {} => {}",
+                 sink.getName(),
+                 sink.getX(),
+                 x);
+      sink.setLocation(x, y);
+      ++numMoved;
+    }
+  });
+  if (numMoved > 0) {
+    logger_->info(CTS,
+                  136,
+                  " Sinks moved off the location of another sink: {}.",
+                  numMoved);
+  }
 }
 
 void HTreeBuilder::initTopLevelSinks(

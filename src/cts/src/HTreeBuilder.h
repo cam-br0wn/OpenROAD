@@ -303,6 +303,7 @@ class HTreeBuilder : public TreeBuilder
   void reportWireSegment(unsigned key) const;
   void createClockSubNets();
   void createSingleBufferClockNet();
+  void separateCoincidentSinks();
   void initTopLevelSinks(std::vector<std::pair<float, float>>& sinkLocations,
                          std::vector<const ClockInst*>& sinkInsts);
   void initSecondLevelSinks(std::vector<std::pair<float, float>>& sinkLocations,

@@ -29,6 +29,7 @@ or_integration_tests(
     gated_clock3
     gated_clock4
     gated_clock5
+    gated_clock_same_center
     hier_insertion_delay
     insertion_delay
     inverters
